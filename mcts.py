@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Tuple, Union
 
 import numpy as np
 import torch
@@ -6,7 +6,7 @@ import torch.multiprocessing
 
 import connect_four
 
-T_EXAMPLE = List[List[torch.Tensor, torch.Tensor, float]]
+T_EXAMPLE = List[List[Union[torch.Tensor, torch.Tensor, float]]]
 
 
 class NetworkCache:
@@ -118,7 +118,7 @@ def execute_episode(nnet: torch.nn.Module, num_mcts_sims: int, nc: NetworkCache)
         state = -state
 
 
-def match_rewards(examples: List[List[torch.Tensor, torch.Tensor, Optional[float]]], reward: float) -> T_EXAMPLE:
+def match_rewards(examples: List[List[Union[torch.Tensor, torch.Tensor, Optional[float]]]], reward: float) -> T_EXAMPLE:
     assigned_examples = []
     for example in reversed(examples):
         example[2] = reward
