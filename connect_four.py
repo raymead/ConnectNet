@@ -1,9 +1,9 @@
-from typing import Optional
+from typing import Optional, List, Tuple
 
 import torch
 
 
-def get_pairs() -> list[tuple[list[int], list[int]]]:
+def get_pairs() -> List[Tuple[List[int], List[int]]]:
     possible_pairs = []
     for i in range(6):
         for j in range(7):
@@ -39,7 +39,7 @@ def game_ended(state: torch.Tensor) -> Optional[int]:
     return None
 
 
-def get_valid_actions(state: torch.Tensor) -> list[int]:
+def get_valid_actions(state: torch.Tensor) -> List[int]:
     val = torch.nonzero(((state.squeeze() != 0).sum(axis=0) < 6)).squeeze().tolist()
     if isinstance(val, int):
         return [val]
