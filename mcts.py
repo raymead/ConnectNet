@@ -80,11 +80,13 @@ def policy_iteration(
         optimizer: torch.optim.Optimizer) -> None:
     examples = []
     for i in range(num_iterations):
-        nc = NetworkCache(nnet=nnet)
-        print(f"\nIteration: {i}")
-        for e in range(num_episodes):
-            print(e, end=",")
-            examples += execute_episode(nnet=nnet, num_mcts_sims=num_mcts_sims, nc=nc)
+        with torch.no_grad():
+            nc = NetworkCache(nnet=nnet)
+            print(f"\nIteration: {i}")
+            for e in range(num_episodes):
+                print(e, end=",")
+                examples += execute_episode(nnet=nnet, num_mcts_sims=num_mcts_sims, nc=nc)
+
         train_nnet(nnet=nnet, examples=examples, optimizer=optimizer)
 
 

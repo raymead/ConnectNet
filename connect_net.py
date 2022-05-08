@@ -5,7 +5,7 @@ import torch.nn.functional
 
 class ConnectNet(torch.nn.Module):
     def __init__(self):
-        super().__init__()
+        super(ConnectNet, self).__init__()
         self.layer1 = torch.nn.Sequential(
             torch.nn.Conv2d(in_channels=1, out_channels=64, kernel_size=(4, 4), stride=1, padding=0),
             torch.nn.ReLU(),
