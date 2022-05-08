@@ -20,6 +20,8 @@ def get_pairs() -> List[Tuple[List[int], List[int]]]:
 
 
 pairs = get_pairs()
+pairs_0 = [p[0] for p in pairs]
+pairs_1 = [p[1] for p in pairs]
 
 
 def start_state() -> torch.Tensor:
@@ -28,12 +30,18 @@ def start_state() -> torch.Tensor:
 
 def game_ended(state: torch.Tensor) -> Optional[int]:
     state = state.squeeze()
-    for plist in pairs:
-        val = state[plist[0], plist[1]].sum()
-        if val == 4:
-            return 1
-        elif val == -4:
-            return -1
+    state_sum = state[pairs_0, pairs_1].sum(axis=1)
+    if (state_sum == 4).any():
+        return 1
+    elif (state_sum == -4).any():
+        return -1
+    # # Old Code
+    # for plist in pairs:
+    #     val = state[plist[0], plist[1]].sum()
+    #     if val == 4:
+    #         return 1
+    #     elif val == -4:
+    #         return -1
     if len(get_valid_actions(state)) == 0:
         return 0
     return None
