@@ -7,15 +7,9 @@ import numpy as np
 
 import connect_net
 
-# print(torch.multiprocessing.cpu_count())
-# print(torch.multiprocessing.get_all_sharing_strategies())
-# print(torch.multiprocessing.get_sharing_strategy())
-# print(torch.multiprocessing.get_all_start_methods())
-# print(torch.multiprocessing.get_start_method())
-torch.multiprocessing.set_start_method('fork', force=True)
-
 
 def a_process(a_nnet, a_queue):
+    a_queue.put("atest")
     test_state = np.zeros([6, 7], dtype=np.float32)
     test_state[5, 3] = 1
     test_state[5, 2] = -1
@@ -45,24 +39,31 @@ def a_process(a_nnet, a_queue):
 
 
 if __name__ == '__main__':
+    print(torch.multiprocessing.cpu_count())
+    print(torch.multiprocessing.get_all_sharing_strategies())
+    print(torch.multiprocessing.get_sharing_strategy())
+    print(torch.multiprocessing.get_all_start_methods())
+    print(torch.multiprocessing.get_start_method())
+    torch.multiprocessing.set_start_method("spawn", force=True)
+
     with torch.no_grad():
-        ctx = torch.multiprocessing.get_context("spawn")
+        # ctx = torch.multiprocessing.get_context("ctx")
         nnet = connect_net.ConnectNet()
         nnet.share_memory()
-        q = ctx.Queue()
+        q = torch.multiprocessing.Queue()
         num_processes = 4
         processes = []
         for i in range(num_processes):
-            p = ctx.Process(target=a_process, args=(nnet, q))
+            p = torch.multiprocessing.Process(target=a_process, args=(nnet, q,))
             p.start()
             processes.append(p)
 
         for p in processes:
             p.join()
-            p.close()
 
         while not q.empty():
             print(q.get())
 
         q.close()
+
 

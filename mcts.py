@@ -20,15 +20,7 @@ class NetworkCache:
             v, prob_a = self.nnet(state)
             self.V[rep] = v
             self.P[rep] = prob_a
-            if len(self.V) % 1000 == 0:
-                print(len(self.V))
         return self.V[rep], self.P[rep]
-
-    def get_p(self, rep) -> torch.Tensor:
-        if rep in self.P:
-            return self.P[rep]
-        else:
-            raise ValueError(f"Can't find rep {rep}")
 
 
 class MCTS:
@@ -40,12 +32,11 @@ class MCTS:
         self.Q = {}
         self.N = {}
 
-    def search(self, state: torch.Tensor, nnet: torch.nn.Module):
+    def search(self, state: torch.Tensor, rep: str, nnet: torch.nn.Module):
         ge = connect_four.game_ended(state)
         if ge is not None:
             return -ge
 
-        rep = connect_four.to_rep(state)
         if rep not in self.visited:
             v, prob_a = self.nc.run_network(state=state, rep=rep)
             self.visited.add(rep)
@@ -57,21 +48,21 @@ class MCTS:
             max_u, best_a = -torch.inf, -1
             for a in connect_four.get_valid_actions(state):
                 u_explore = self.N[rep].sum().sqrt() / (1 + self.N[rep][a])
-                u = self.Q[rep][a] + self.c * self.nc.get_p(rep)[0, a] * u_explore
+                u = self.Q[rep][a] + self.c * self.nc.P[rep][0, a] * u_explore
                 if u > max_u:
                     max_u = u
                     best_a = a
             a = best_a
 
-            sp = connect_four.next_state(state, a)
-            v = self.search(sp * -1, nnet)
+            next_state = connect_four.next_state(state, a)
+            next_rep = connect_four.to_rep(next_state)
+            v = self.search(state=next_state * -1, rep=next_rep, nnet=nnet)
 
             self.Q[rep][a] = (self.N[rep][a] + v) / (self.N[rep][a] + 1)
             self.N[rep][a] += 1
             return -v
 
-    def pi(self, state):
-        rep = connect_four.to_rep(state)
+    def pi(self, rep):
         return self.N[rep] / (self.N[rep].sum() + 1e-3)
 
 
@@ -82,7 +73,7 @@ def policy_iteration(
     for i in range(num_iterations):
         with torch.no_grad():
             nc = NetworkCache(nnet=nnet)
-            print(f"\nIteration: {i}")
+            print(f"\nIteration: {i}::", end="")
             for e in range(num_episodes):
                 print(e, end=",")
                 examples += execute_episode(nnet=nnet, num_mcts_sims=num_mcts_sims, nc=nc)
@@ -94,7 +85,7 @@ def train_nnet(nnet: torch.nn.Module, examples: T_EXAMPLE, optimizer: torch.opti
     loss = torch.zeros(1)
     for e in examples:
         v, proba = nnet(e[0])
-        loss += torch.square(v - e[2]) - torch.dot(e[1], torch.log(proba.squeeze()))
+        loss += torch.square(v - e[3]) - torch.dot(e[1], torch.log(proba.squeeze()))
 
     optimizer.zero_grad()
     loss.backward()
@@ -106,13 +97,19 @@ def execute_episode(nnet: torch.nn.Module, num_mcts_sims: int, nc: NetworkCache)
     mcts = MCTS(c=1, nc=nc)
     state = connect_four.start_state()
     while True:
+        rep = connect_four.to_rep(state=state)
         for i in range(num_mcts_sims):
-            mcts.search(state=state, nnet=nnet)
-        pi_val = mcts.pi(state=state)
-        examples.append([state, pi_val, None])
+            mcts.search(state=state, rep=rep, nnet=nnet)
+
+        # Calculate action
+        mcts_n = mcts.N[rep]
+        pi_val = mcts_n / (mcts_n.sum() + 1e-3)
         a = int(np.argmax(np.random.multinomial(1, pvals=pi_val)))
+        examples.append([state, pi_val, a, None])
+
         state = connect_four.next_state(state, a)
         ge = connect_four.game_ended(state)
+
         if ge is not None:
             return match_rewards(examples, ge)
         state = -state
@@ -121,7 +118,7 @@ def execute_episode(nnet: torch.nn.Module, num_mcts_sims: int, nc: NetworkCache)
 def match_rewards(examples: List[List[Union[torch.Tensor, torch.Tensor, Optional[float]]]], reward: float) -> T_EXAMPLE:
     assigned_examples = []
     for example in reversed(examples):
-        example[2] = reward
+        example[3] = reward
         reward = -reward
         assigned_examples.append(example)
     return assigned_examples

@@ -25,3 +25,14 @@ class ConnectNet(torch.nn.Module):
         output = self.layer1(x)
         output = self.fc(output)
         return torch.tanh(output[:, 0]), torch.nn.functional.softmax(output[:, 1:], dim=1)
+
+
+def save_model(nnet: torch.nn.Module, path: str) -> None:
+    torch.save(nnet.state_dict(), f"{path}")
+
+
+def load_model(path: str) -> torch.nn.Module:
+    model = ConnectNet()
+    model.load_state_dict(torch.load(f"{path}"))
+    print(model.eval())
+    return model

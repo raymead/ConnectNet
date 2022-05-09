@@ -20,35 +20,29 @@ def get_pairs() -> List[Tuple[List[int], List[int]]]:
 
 
 pairs = get_pairs()
-pairs_0 = [p[0] for p in pairs]
-pairs_1 = [p[1] for p in pairs]
+pairs_0 = torch.LongTensor([p[0] for p in pairs])
+pairs_1 = torch.LongTensor([p[1] for p in pairs])
 
 
 def start_state() -> torch.Tensor:
-    return torch.zeros([1, 1, 6, 7])
+    return torch.zeros([6, 7]).view(1, 1, 6, 7)
 
 
 def game_ended(state: torch.Tensor) -> Optional[int]:
-    state = state.squeeze()
+    state = state.view(6, 7)
     state_sum = state[pairs_0, pairs_1].sum(axis=1)
-    if (state_sum == 4).any():
+    if state_sum.max() == 4:
         return 1
-    elif (state_sum == -4).any():
+    elif state_sum.min() == -4:
         return -1
-    # # Old Code
-    # for plist in pairs:
-    #     val = state[plist[0], plist[1]].sum()
-    #     if val == 4:
-    #         return 1
-    #     elif val == -4:
-    #         return -1
-    if len(get_valid_actions(state)) == 0:
+    elif state.count_nonzero() == 42:
         return 0
-    return None
+    else:
+        return None
 
 
 def get_valid_actions(state: torch.Tensor) -> List[int]:
-    val = torch.nonzero(((state.squeeze() != 0).sum(axis=0) < 6)).squeeze().tolist()
+    val = (state.view(6, 7)[0, :] == 0).nonzero()[:, 0].tolist()
     if isinstance(val, int):
         return [val]
     else:
@@ -57,21 +51,18 @@ def get_valid_actions(state: torch.Tensor) -> List[int]:
 
 # State is always oriented to it being red's turn
 def next_state(state: torch.Tensor, action: int) -> torch.Tensor:
-    state = state.squeeze().clone()
-    position = torch.argwhere(state[:, action] != 0)
-
-    if len(position) == 0:
-        state[5, action] = 1
-        return state.reshape(1, 1, 6, 7)
-
-    position = position.min()
-    if position == 0:
+    state = state.detach().clone().view(6, 7)
+    if state[0, action] != 0:
         print(state)
         print(action)
         raise ValueError(f"Invalid action {action} for state: \n{state}")
+    elif state[5, action] == 0:
+        state[5, action] = 1
+        return state.view(1, 1, 6, 7)
     else:
-        state[position - 1, action] = 1
-        return state.reshape(1, 1, 6, 7)
+        position = torch.nonzero(state[:, action]).min() - 1
+        state[position, action] = 1
+        return state.view(1, 1, 6, 7)
 
 
 def to_rep(state: torch.Tensor) -> str:
