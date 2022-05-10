@@ -7,11 +7,11 @@ class ConnectNet(torch.nn.Module):
     def __init__(self):
         super(ConnectNet, self).__init__()
         self.layer1 = torch.nn.Sequential(
-            torch.nn.Conv2d(in_channels=1, out_channels=64, kernel_size=(4, 4), stride=1, padding=0),
+            torch.nn.Conv2d(in_channels=1, out_channels=128, kernel_size=(4, 4), stride=1, padding=0),
             torch.nn.ReLU(),
         )
         self.fc = torch.nn.Sequential(
-            torch.nn.Conv2d(in_channels=64, out_channels=64, kernel_size=(3, 4), stride=1, padding=0),
+            torch.nn.Conv2d(in_channels=128, out_channels=64, kernel_size=(3, 4), stride=1, padding=0),
             torch.nn.ReLU(),
             torch.nn.Flatten(),
 

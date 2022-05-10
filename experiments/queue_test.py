@@ -1,5 +1,7 @@
 import os
-os.environ["KMP_DUPLICATE_LIB_OK"] = "True"
+import sys
+# os.environ["KMP_DUPLICATE_LIB_OK"] = "True"
+sys.path.append("/Users/raymond/code/FinalProject563")
 
 import torch
 import torch.multiprocessing
@@ -24,18 +26,19 @@ def a_process(a_nnet, a_queue):
 
     test_state_tensor = torch.Tensor(test_state).view(1, 1, 6, 7)
     print("here2.5")
-    print(test_state_tensor)
+    # print(test_state_tensor)
     try:
         v, a_prob = a_nnet(test_state_tensor)
-        print(v)
+        # print(v)
     except Exception as e:
         print(e)
         raise e
-    print("here3")
-    a_queue.put("test")
-    a_queue.put("test2")
-    a_queue.put([test_state_tensor, a_prob, v])
+    # print("here3")
+    # a_queue.put("test")
+    # a_queue.put("test2")
+    # a_queue.put([test_state_tensor, a_prob, v])
     print("here4")
+    print(v)
 
 
 if __name__ == '__main__':
