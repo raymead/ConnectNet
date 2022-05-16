@@ -1,64 +1,38 @@
+import os
 import pickle
 import time
-from typing import Optional, List, Tuple, Union
+from typing import List, Tuple, Union
 
 import numpy as np
 import torch
 import torch.multiprocessing
 
 import connect_four
-
-T_EXAMPLE = List[List[Union[torch.Tensor, torch.Tensor, float]]]
-
-
-class CalculationCache:
-    def __init__(self, nnet: torch.nn.Module) -> None:
-        self.nnet = nnet
-        self.V = {}
-        self.P = {}
-
-        self.GE = {}
-
-        self.NS = {}
-        self.NR = {}
-
-    def network(self, state: torch.Tensor, rep: str) -> Tuple[torch.Tensor, torch.Tensor]:
-        if rep not in self.V:
-            v, prob_a = self.nnet(state.view(1, 1, 6, 7))
-            self.V[rep] = v
-            self.P[rep] = prob_a[0]
-        return self.V[rep], self.P[rep]
-
-    def game_ended(self, state: torch.Tensor, rep: str):
-        if rep not in self.GE:
-            self.GE[rep] = connect_four.game_ended(state)
-        return self.GE[rep]
-
-    def next_state_rep(self, state: torch.Tensor, rep: str, action: int):
-        if (rep, action) not in self.NS:
-            next_state = -1 * connect_four.next_state(state, action)
-            next_rep = connect_four.to_rep(next_state)
-            self.NS[rep, action] = next_state
-            self.NR[rep, action] = next_rep
-        return self.NS[rep, action], self.NR[rep, action]
+import connect_net
+import utils
 
 
 class MCTS:
-    def __init__(self, c: float, nc: CalculationCache) -> None:
+    def __init__(self, c: float, game_cache: connect_four.GameCache, network_cache: connect_net.NetworkCache) -> None:
         self.c = c
-        self.nc = nc
+        self.game_cache = game_cache
+        self.network_cache = network_cache
 
         self.visited = set()
         self.Q = {}
         self.N = {}
 
+    def simulate_moves(self, num_mcts_sims: int, state: torch.Tensor, rep: str, nnet: torch.nn.Module):
+        for i in range(num_mcts_sims):
+            self.search(state=state, rep=rep, nnet=nnet)
+
     def search(self, state: torch.Tensor, rep: str, nnet: torch.nn.Module) -> Union[torch.Tensor, int]:
-        ge = self.nc.game_ended(state=state, rep=rep)
+        ge = self.game_cache.game_ended(state=state, rep=rep)
         if ge is not None:
             return -ge
 
         if rep not in self.visited:
-            v, prob_a = self.nc.network(state=state, rep=rep)
+            v, prob_a = self.network_cache.network(state=state, rep=rep)
             self.visited.add(rep)
             self.N[rep] = torch.zeros(7)
             self.Q[rep] = torch.zeros(7)
@@ -68,11 +42,11 @@ class MCTS:
             n = self.N[rep]
             visits = 1 + n
             u_explore = (n.sum() + 1).sqrt() / visits
-            u = 1 + self.Q[rep] / visits + self.c * self.nc.P[rep] * u_explore
+            u = 1 + self.Q[rep] / visits + self.c * self.network_cache.P[rep] * u_explore
             u = u * (1 - state[0, :].abs())
             a = int(torch.argmax(u))
 
-            next_state, next_rep = self.nc.next_state_rep(state=state, rep=rep, action=a)
+            next_state, next_rep = self.game_cache.next_state_rep(state=state, rep=rep, action=a)
             v = self.search(state=next_state, rep=next_rep, nnet=nnet)
 
             # Total values / visits
@@ -80,20 +54,15 @@ class MCTS:
             self.N[rep][a] += 1
             return -v
 
-    def pi(self, rep):
-        return self.N[rep] / (self.N[rep].sum() + 1e-3)
+    def get_random_action(self, rep: str) -> Tuple[int, torch.Tensor]:
+        mcts_n = self.N[rep]
+        pi_val = mcts_n / mcts_n.sum()
+        a = int(torch.multinomial(pi_val, 1))
+        return a, pi_val
 
-
-def policy_iteration(nnet: torch.nn.Module, num_iterations: int, num_episodes: int, num_mcts_sims: int) -> T_EXAMPLE:
-    examples = []
-    for i in range(num_iterations):
-        with torch.no_grad():
-            nc = CalculationCache(nnet=nnet)
-            print(f"\nIteration: {i}::", end="")
-            for e in range(num_episodes):
-                print(e, end=",")
-                examples += execute_episode(nnet=nnet, num_mcts_sims=num_mcts_sims, nc=nc)
-    return examples
+    def get_best_action(self, rep: str) -> int:
+        a = int(torch.argmax(self.N[rep]))
+        return a
 
 
 def find_policy_examples(
@@ -102,16 +71,18 @@ def find_policy_examples(
     print(f"PROC::LAUNCH::{process}")
     examples = []
     total_time = 0
-    nc = CalculationCache(nnet=nnet)
+    nc = connect_net.NetworkCache(nnet=nnet)
+    gc = connect_four.GameCache()
     with torch.no_grad():
         for e in range(num_episodes):
             # Beginning of batch
             if e % batch_size == 0:
                 print(f"PROC::Checkpoint::{process}::{e}::{num_episodes}")
-                nc = CalculationCache(nnet=nnet)
+                nc = connect_net.NetworkCache(nnet=nnet)
+                gc = connect_four.GameCache()
 
             start_time = time.time()
-            examples += execute_episode(nnet=nnet, num_mcts_sims=num_mcts_sims, nc=nc)
+            examples.append(execute_episode(nnet=nnet, num_mcts_sims=num_mcts_sims, net_cache=nc, game_cache=gc))
             total_time += time.time() - start_time
 
             # End of batch
@@ -131,34 +102,40 @@ def find_policy_examples(
 def name_policy_batch(
         folder: str, iteration: int, process: int,
         num_episodes: int, num_mcts_sims: int, batch: int) -> str:
-    return f"{folder}/examples-{iteration}-{process}-{num_episodes}-{num_mcts_sims}-{batch}.pickle"
+    return os.path.join(
+        folder,
+        f"examples-{iteration}-{process}-{num_episodes}-{num_mcts_sims}-{batch}.pickle",
+    )
 
 
-def execute_episode(nnet: torch.nn.Module, num_mcts_sims: int, nc: CalculationCache) -> T_EXAMPLE:
-    examples = []
-    mcts = MCTS(c=1, nc=nc)
+def execute_episode(
+        nnet: torch.nn.Module, num_mcts_sims: int,
+        net_cache: connect_net.NetworkCache, game_cache: connect_four.GameCache) -> List[utils.MoveInfo]:
+    mcts_data = MCTS(c=1, game_cache=game_cache, network_cache=net_cache)
     state = connect_four.start_state()
     rep = connect_four.to_rep(state=state)
+
+    game_info = []
+    move = 1
     while True:
-        for i in range(num_mcts_sims):
-            mcts.search(state=state, rep=rep, nnet=nnet)
+        mcts_data.simulate_moves(num_mcts_sims=num_mcts_sims, state=state, rep=rep, nnet=nnet)
+        a, pi_val = mcts_data.get_random_action(rep=rep)
 
-        # Calculate action
-        mcts_n = mcts.N[rep]
-        pi_val = mcts_n / (mcts_n.sum() + 1e-3)
-        a = int(np.argmax(np.random.multinomial(1, pvals=pi_val)))
-        examples.append([state, pi_val, a, None])
+        move_info = utils.MoveInfo(state=state, rep=rep, move=move, action=a, pi_val=pi_val)
+        game_info.append(move_info)
 
-        state, rep = nc.next_state_rep(state=state, rep=rep, action=a)
-        ge = nc.game_ended(state=state, rep=rep)
+        state, rep = game_cache.next_state_rep(state=state, rep=rep, action=a)
+        ge = game_cache.game_ended(state=state, rep=rep)
         if ge is not None:
-            return match_rewards(examples, -ge)
+            return match_rewards(game_info=game_info, reward=-ge)
+
+        move += 1
 
 
-def match_rewards(examples: List[List[Union[torch.Tensor, torch.Tensor, Optional[float]]]], reward: float) -> T_EXAMPLE:
+def match_rewards(game_info: List[utils.MoveInfo], reward: int) -> List[utils.MoveInfo]:
     assigned_examples = []
-    for example in reversed(examples):
-        example[3] = reward
+    for move_info in reversed(game_info):
+        move_info.set_game_ended(ge=reward)
         reward = -reward
-        assigned_examples.append(example)
+        assigned_examples.append(move_info)
     return assigned_examples

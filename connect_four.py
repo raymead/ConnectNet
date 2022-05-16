@@ -22,6 +22,7 @@ def get_pairs() -> List[Tuple[List[int], List[int]]]:
 pairs = get_pairs()
 pairs_0 = torch.LongTensor([p[0] for p in pairs])
 pairs_1 = torch.LongTensor([p[1] for p in pairs])
+del pairs
 
 
 def start_state() -> torch.Tensor:
@@ -51,5 +52,30 @@ def next_state(state: torch.Tensor, action: int) -> torch.Tensor:
         return state
 
 
+def possible_moves(state: torch.Tensor) -> torch.Tensor:
+    return (1 - state[0, :].abs()).nonzero().flatten()
+
+
 def to_rep(state: torch.Tensor) -> str:
     return ''.join(f"{c:.0f}" for r in (state + 1).tolist() for c in r)
+
+
+class GameCache:
+    def __init__(self) -> None:
+        self.GE = {}
+        self.NS = {}
+        self.NR = {}
+
+    def game_ended(self, state: torch.Tensor, rep: str):
+        if rep not in self.GE:
+            self.GE[rep] = game_ended(state=state)
+        return self.GE[rep]
+
+    def next_state_rep(self, state: torch.Tensor, rep: str, action: int):
+        if (rep, action) not in self.NS:
+            new_state = -1 * next_state(state=state, action=action)
+            new_rep = to_rep(state=new_state)
+            self.NS[rep, action] = new_state
+            self.NR[rep, action] = new_rep
+        return self.NS[rep, action], self.NR[rep, action]
+
