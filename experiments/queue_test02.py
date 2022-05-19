@@ -12,7 +12,7 @@ def start_mcts(num_processes: int, num_episodes: int, num_mcts_sims: int) -> Non
     nnet.share_memory()
     processes = []
     for i in range(num_processes):
-        p = mp.Process(target=mcts.find_policy_examples, args=(nnet, 1, i, num_episodes, num_mcts_sims))
+        p = mp.Process(target=mcts.generate_examples, args=(nnet, 1, i, num_episodes, num_mcts_sims))
         p.start()
         processes.append(p)
     for p in processes:

@@ -58,8 +58,11 @@ def save_model(nnet: torch.nn.Module, path: str) -> None:
     torch.save(nnet.state_dict(), f"{path}")
 
 
-def load_model(path: str) -> torch.nn.Module:
+def load_model(path: str, log: bool = True) -> torch.nn.Module:
     model = ConnectNet()
-    model.load_state_dict(torch.load(f"{path}"))
-    print(model.eval())
+    model.load_state_dict(torch.load(path))
+    if log:
+        print(model.eval())
+    else:
+        model.eval()
     return model
