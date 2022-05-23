@@ -41,8 +41,8 @@ def game_ended(state: torch.Tensor) -> Optional[int]:
         return None
 
 
-# State is always oriented to it being red's turn
 def next_state(state: torch.Tensor, action: int) -> torch.Tensor:
+    """State is always oriented to being red's turn"""
     state = state.clone()
     position = 5 - state[:, action].count_nonzero()
     if position == -1:

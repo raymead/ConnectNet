@@ -12,11 +12,9 @@ import connect_net
 import mcts
 import utils
 
-T_GAMES = List[List]
-
 
 def start_simulation(
-        model: Optional[str], trial: str, iteration: int, c: float,
+        model: Optional[str], trial: str, iteration: int, c: float, random_moves: int,
         num_processes: int, num_episodes: int, num_mcts_sims: int, batch_size: int) -> None:
     # Setup save folder
     folder = utils.get_simulation_folder(trial=trial, iteration=iteration)
@@ -24,7 +22,7 @@ def start_simulation(
     # Load model
     nnet = connect_net.ConnectNet() if model is None else connect_net.load_model(model)
     nnet.share_memory()
-    connect_net.save_model(nnet, get_model_path(folder=folder, iteration=iteration))
+    connect_net.save_model(nnet, utils.get_model_path(folder=folder, iteration=iteration))
 
     processes = []
     for i in range(num_processes):
@@ -32,7 +30,7 @@ def start_simulation(
             target=mcts.generate_examples,
             kwargs=dict(
                 nnet=nnet, folder=folder, iteration=iteration, process=i,
-                c=c, num_episodes=num_episodes, num_mcts_sims=num_mcts_sims,
+                c=c, num_episodes=num_episodes, num_mcts_sims=num_mcts_sims, random_moves=random_moves,
                 batch_size=batch_size,
             ))
         p.start()
@@ -45,7 +43,7 @@ def train_model(
         trial: str, iteration: int,
         learning_rate: float, epochs: int, train_frac: float):
     sim_folder = utils.get_simulation_folder(trial=trial, iteration=iteration)
-    sim_model_path = get_model_path(folder=sim_folder, iteration=iteration)
+    sim_model_path = utils.get_model_path(folder=sim_folder, iteration=iteration)
     sim_files = glob.glob(os.path.join(sim_folder, f"examples-{iteration}-*.pickle"))
     nnet = connect_net.load_model(sim_model_path)
 
@@ -80,7 +78,7 @@ def train_model(
             print(f"EPOCH::{i}  LOSS::{val_loss:.4f}  TIME::{time.time() - start_time:.4f}")
 
     training_folder = utils.get_training_folder(trial=trial, iteration=iteration)
-    training_path = get_model_path(folder=training_folder, iteration=iteration)
+    training_path = utils.get_model_path(folder=training_folder, iteration=iteration)
     losses_train_path = get_losses_train_path(folder=training_folder, iteration=iteration)
     losses_val_path = get_losses_val_path(folder=training_folder, iteration=iteration)
 
@@ -89,13 +87,6 @@ def train_model(
         pickle.dump(obj=losses_train, file=f)
     with open(losses_val_path, "wb") as f:
         pickle.dump(obj=losses_val, file=f)
-
-
-def full_loss_fn(est_scores, est_probs, target_scores, target_probs):
-    loss_scores = (est_scores - target_scores).square().sum()
-    loss_probs = (target_probs * est_probs.log()).sum()
-    loss_total = loss_scores - loss_probs
-    return loss_total
 
 
 def create_pretrained_model(learning_rate: float, train_fraction: float, epochs: int, l2_lambda: float):
@@ -144,6 +135,15 @@ def create_pretrained_model(learning_rate: float, train_fraction: float, epochs:
     connect_net.save_model(nnet, "models/pretrain01.model")
 
 
+# Helper functions
+def full_loss_fn(est_scores: torch.Tensor, est_probs: torch.Tensor,
+                 target_scores: torch.Tensor, target_probs: torch.Tensor):
+    loss_scores = (est_scores - target_scores).square().sum()
+    loss_probs = (target_probs * est_probs.log()).sum()
+    loss_total = loss_scores - loss_probs
+    return loss_total
+
+
 def split_games(examples: List[List[utils.MoveInfo]], train_fraction: float):
     total_num = len(examples)
     train_num, val_num = utils.split_train_val_values(total_count=total_num, train_fraction=train_fraction)
@@ -161,11 +161,6 @@ def split_items(games: List[List[utils.MoveInfo]]) -> Tuple[torch.Tensor, torch.
     return boards, scores, moves
 
 
-# File Paths
-def get_model_path(folder: str, iteration: int) -> str:
-    return os.path.join(folder, f"model-{iteration}.model")
-
-
 def get_losses_val_path(folder: str, iteration: int) -> str:
     return os.path.join(folder, f"validation-losses-{iteration}.pickle")
 
@@ -175,16 +170,17 @@ def get_losses_train_path(folder: str, iteration: int) -> str:
 
 
 if __name__ == '__main__':
-    trial_name = "test01"
-    for j in range(19, 101):
+    trial_name = "blank01"
+    for j in range(52, 150):
         if j == 1:
-            prev_path = "models/pretrain01.model"
+            # prev_path = "models/pretrain01.model"
+            prev_path = None
         else:
             prev_folder = utils.get_training_folder(trial=trial_name, iteration=j-1)
-            prev_path = get_model_path(folder=prev_folder, iteration=j-1)
+            prev_path = utils.get_model_path(folder=prev_folder, iteration=j-1)
         start_simulation(
-            model=prev_path, trial=trial_name, iteration=j, c=1,
-            num_processes=6, num_episodes=256, num_mcts_sims=64,
+            model=prev_path, trial=trial_name, iteration=j, c=1, random_moves=4,
+            num_processes=6, num_episodes=256, num_mcts_sims=128,
             batch_size=16,
         )
         train_model(trial=trial_name, iteration=j, epochs=50, learning_rate=0.001, train_frac=0.85)

@@ -33,9 +33,11 @@ class MCTS(abc.ABC):
         next_state, next_rep = self.game_cache.next_state_rep(state=state, rep=rep, action=action)
         v = self.search(state=next_state, rep=next_rep)
 
+        visits = self.N[rep][action]
+        visits_p1 = visits + 1
         # Total values / visits
-        self.Q[rep][action] = (self.N[rep][action] * self.Q[rep][action] + v) / (self.N[rep][action] + 1)
-        self.N[rep][action] += 1
+        self.Q[rep][action] = (visits * self.Q[rep][action] + v) / visits_p1
+        self.N[rep][action] = visits_p1
         return -v
 
     def init_node(self, rep: str) -> None:
@@ -51,6 +53,15 @@ class MCTS(abc.ABC):
 
     def get_best_action(self, rep: str) -> int:
         return int(torch.argmax(self.N[rep]))
+
+    def get_best_eval(self, rep: str) -> int:
+        return int(torch.argmax(self.Q[rep]))
+
+    def get_sims(self, rep: str) -> torch.Tensor:
+        return self.N[rep]
+
+    def get_evals(self, rep: str) -> torch.Tensor:
+        return self.Q[rep]
 
 
 class RandomMCTS(MCTS):
@@ -104,7 +115,7 @@ class NetworkMCTS(MCTS):
 
 
 def generate_examples(
-        nnet: torch.nn.Module, folder: str, iteration: int, process: int, c: float,
+        nnet: torch.nn.Module, folder: str, iteration: int, process: int, c: float, random_moves: int,
         num_episodes: int, num_mcts_sims: int, batch_size: int) -> None:
     print(f"PROC::LAUNCH::{process}")
     examples = []
@@ -120,7 +131,12 @@ def generate_examples(
                 gc = connect_four.GameCache()
 
             start_time = time.time()
-            examples.append(execute_episode(c=c, num_mcts_sims=num_mcts_sims, net_cache=nc, game_cache=gc))
+            examples.append(
+                execute_episode(
+                    c=c, num_mcts_sims=num_mcts_sims, random_moves=random_moves,
+                    net_cache=nc, game_cache=gc,
+                )
+            )
             total_time += time.time() - start_time
 
             # End of batch
@@ -138,7 +154,7 @@ def generate_examples(
 
 
 def execute_episode(
-        num_mcts_sims: int, c: float,
+        num_mcts_sims: int, c: float, random_moves: int,
         net_cache: connect_net.NetworkCache, game_cache: connect_four.GameCache) -> List[utils.MoveInfo]:
     mcts_data = NetworkMCTS(c=c, game_cache=game_cache, network_cache=net_cache)
 
@@ -148,6 +164,7 @@ def execute_episode(
     rep = connect_four.to_rep(state=state)
     while True:
         mcts_data.simulate_moves(num_mcts_sims=num_mcts_sims, state=state, rep=rep)
+        # TODO: change temperature over time??
         a, pi_val = mcts_data.get_random_action(rep=rep)
 
         move_info = utils.MoveInfo(state=state, rep=rep, move=move, action=a, pi_val=pi_val)
@@ -161,6 +178,7 @@ def execute_episode(
         move += 1
 
 
+# Helpers
 def batch_path(
         folder: str, iteration: int, process: int,
         num_episodes: int, num_mcts_sims: int, batch: int) -> str:

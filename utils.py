@@ -1,6 +1,7 @@
+import glob
 import os
 import random
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 
 import torch
 
@@ -45,15 +46,37 @@ def get_data_folder() -> str:
     return "data"
 
 
+def get_trial_folder(trial: str) -> str:
+    folder = os.path.join(get_data_folder(), f"trial{trial}")
+    if not os.path.isdir(folder):
+        os.makedirs(folder)
+    return folder
+
+
 def get_simulation_folder(trial: str, iteration: int) -> str:
-    folder = os.path.join(get_data_folder(), f"trial{trial}", f"simulation{iteration}")
+    folder = os.path.join(get_trial_folder(trial=trial), f"simulation{iteration}")
     if not os.path.isdir(folder):
         os.makedirs(folder)
     return folder
 
 
 def get_training_folder(trial: str, iteration: int) -> str:
-    folder = os.path.join(get_data_folder(), f"trial{trial}", f"training{iteration}")
+    folder = os.path.join(get_trial_folder(trial=trial), f"training{iteration}")
     if not os.path.isdir(folder):
         os.makedirs(folder)
     return folder
+
+
+def get_results_folder(trial: str) -> str:
+    folder = os.path.join(get_trial_folder(trial=trial), f"results")
+    if not os.path.isdir(folder):
+        os.makedirs(folder)
+    return folder
+
+
+def get_training_folders(trial: str) -> List[str]:
+    return glob.glob(os.path.join(get_trial_folder(trial=trial), f"training*"))
+
+
+def get_model_path(folder: str, iteration: int) -> str:
+    return os.path.join(folder, f"model-{iteration}.model")
