@@ -2,7 +2,7 @@ import abc
 import os.path
 import random
 import time
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Tuple, Dict, Any, Type
 
 import pandas
 import torch
@@ -165,7 +165,7 @@ def parallel_competition(
 
 
 def evaluate_batch(
-        trial: str, c: float, num_mcts_sims: int, random_moves: int, num_games: int, num_processes: int,
+        klass: Type[torch.nn.Module], trial: str, c: float, num_mcts_sims: int, random_moves: int, num_games: int, num_processes: int,
         max_iteration: Optional[int], k: float) -> None:
     if max_iteration is None:
         max_iteration = max([int(f.split("training")[1]) for f in utils.get_training_folders(trial=trial)])
@@ -174,7 +174,7 @@ def evaluate_batch(
     for iteration in range(1, max_iteration + 1):
         training_folder = utils.get_training_folder(trial=trial, iteration=iteration)
         training_path = utils.get_model_path(folder=training_folder, iteration=iteration)
-        nnet = connect_net.load_model(path=training_path, log=False)
+        nnet = connect_net.load_model(path=training_path, klass=klass, log=False)
         nnet.share_memory()
         strategies[iteration] = NetworkStrategy(nnet=nnet, c=c, num_mcts_sims=num_mcts_sims, random_moves=random_moves)
     scores = {key: 1600 for key in strategies.keys()}
@@ -206,7 +206,8 @@ def next_rating(rating1: float, rating2: float, score1: float, score2: float, k:
 
 if __name__ == '__main__':
     evaluate_batch(
-        trial="blank01", num_processes=6, max_iteration=74,
-        num_games=300, k=16,
+        klass=connect_net.ConnectNet,
+        trial="blank01", num_processes=6, max_iteration=96,
+        num_games=400, k=16,
         c=1, num_mcts_sims=32, random_moves=4,
     )

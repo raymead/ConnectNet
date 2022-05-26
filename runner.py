@@ -2,7 +2,7 @@ import glob
 import os
 import pickle
 import time
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Type
 
 import numpy as np
 import torch
@@ -14,13 +14,17 @@ import utils
 
 
 def start_simulation(
-        model: Optional[str], trial: str, iteration: int, c: float, random_moves: int,
+        model: Optional[str], klass: Type[torch.nn.Module], trial: str, iteration: int, c: float, random_moves: int,
         num_processes: int, num_episodes: int, num_mcts_sims: int, batch_size: int) -> None:
     # Setup save folder
     folder = utils.get_simulation_folder(trial=trial, iteration=iteration)
 
     # Load model
-    nnet = connect_net.ConnectNet() if model is None else connect_net.load_model(model)
+    if model is None:
+        nnet = klass()
+    else:
+        nnet = connect_net.load_model(model, klass=klass)
+    nnet.eval()
     nnet.share_memory()
     connect_net.save_model(nnet, utils.get_model_path(folder=folder, iteration=iteration))
 
@@ -40,12 +44,13 @@ def start_simulation(
 
 
 def train_model(
-        trial: str, iteration: int,
-        learning_rate: float, epochs: int, train_frac: float):
+        klass: Type[torch.nn.Module], trial: str, iteration: int,
+        learning_rate: float, epochs: int, train_frac: float, l2_lambda: float):
     sim_folder = utils.get_simulation_folder(trial=trial, iteration=iteration)
     sim_model_path = utils.get_model_path(folder=sim_folder, iteration=iteration)
     sim_files = glob.glob(os.path.join(sim_folder, f"examples-{iteration}-*.pickle"))
-    nnet = connect_net.load_model(sim_model_path)
+    nnet = connect_net.load_model(path=sim_model_path, klass=klass)
+    nnet.train()
 
     examples = []
     for fname in sim_files:
@@ -64,7 +69,9 @@ def train_model(
     for i in range(epochs):
         start_time = time.time()
         v, proba = nnet(train_boards.view(-1, 1, 6, 7))
-        train_loss = full_loss_fn(v, proba, train_scores, train_moves)
+        train_loss_reg = l2_lambda * sum(p.square().sum() for p in nnet.parameters())
+        train_loss = full_loss_fn(v, proba, train_scores, train_moves) + train_loss_reg
+
         losses_train.append(train_loss.item())
 
         optimizer.zero_grad()
@@ -72,7 +79,8 @@ def train_model(
         optimizer.step()
 
         v, proba = nnet(val_boards.view(-1, 1, 6, 7))
-        val_loss = full_loss_fn(v, proba, val_scores, val_moves).item()
+        val_loss_reg = l2_lambda * sum(p.square().sum() for p in nnet.parameters())
+        val_loss = (full_loss_fn(v, proba, val_scores, val_moves) + val_loss_reg).item()
         losses_val.append(val_loss)
         if i % 10 == 0:
             print(f"EPOCH::{i}  LOSS::{val_loss:.4f}  TIME::{time.time() - start_time:.4f}")
@@ -170,8 +178,8 @@ def get_losses_train_path(folder: str, iteration: int) -> str:
 
 
 if __name__ == '__main__':
-    trial_name = "blank01"
-    for j in range(52, 150):
+    trial_name = "conv501"
+    for j in range(2, 150):
         if j == 1:
             # prev_path = "models/pretrain01.model"
             prev_path = None
@@ -179,8 +187,11 @@ if __name__ == '__main__':
             prev_folder = utils.get_training_folder(trial=trial_name, iteration=j-1)
             prev_path = utils.get_model_path(folder=prev_folder, iteration=j-1)
         start_simulation(
-            model=prev_path, trial=trial_name, iteration=j, c=1, random_moves=4,
+            model=prev_path, klass=connect_net.ConnectNet2, trial=trial_name, iteration=j, c=1, random_moves=8,
             num_processes=6, num_episodes=256, num_mcts_sims=128,
             batch_size=16,
         )
-        train_model(trial=trial_name, iteration=j, epochs=50, learning_rate=0.001, train_frac=0.85)
+        train_model(
+            trial=trial_name, klass=connect_net.ConnectNet2, iteration=j,
+            epochs=50, learning_rate=0.001, train_frac=0.85, l2_lambda=1e-4,
+        )

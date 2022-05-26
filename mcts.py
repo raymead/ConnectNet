@@ -51,8 +51,11 @@ class MCTS(abc.ABC):
         a = int(torch.multinomial(pi_val, 1))
         return a, pi_val
 
-    def get_best_action(self, rep: str) -> int:
-        return int(torch.argmax(self.N[rep]))
+    def get_best_action(self, rep: str) -> Tuple[int, torch.Tensor]:
+        pi_val = torch.zeros(7)
+        a = int(torch.argmax(self.N[rep]))
+        pi_val[a] = 1
+        return a, pi_val
 
     def get_best_eval(self, rep: str) -> int:
         return int(torch.argmax(self.Q[rep]))
@@ -164,8 +167,10 @@ def execute_episode(
     rep = connect_four.to_rep(state=state)
     while True:
         mcts_data.simulate_moves(num_mcts_sims=num_mcts_sims, state=state, rep=rep)
-        # TODO: change temperature over time??
-        a, pi_val = mcts_data.get_random_action(rep=rep)
+        if move <= random_moves * 2:
+            a, pi_val = mcts_data.get_random_action(rep=rep)
+        else:
+            a, pi_val = mcts_data.get_best_action(rep=rep)
 
         move_info = utils.MoveInfo(state=state, rep=rep, move=move, action=a, pi_val=pi_val)
         game_info.append(move_info)
