@@ -80,3 +80,15 @@ def get_training_folders(trial: str) -> List[str]:
 
 def get_model_path(folder: str, iteration: int) -> str:
     return os.path.join(folder, f"model-{iteration}.model")
+
+
+def get_simulation_model_path(trial: str, iteration: int) -> str:
+    return get_model_path(folder=get_simulation_folder(trial=trial, iteration=iteration), iteration=iteration)
+
+
+def get_training_model_path(trial: str, iteration: int) -> str:
+    return get_model_path(folder=get_training_folder(trial=trial, iteration=iteration), iteration=iteration)
+
+
+def get_move8_boards_path():
+    return os.path.join(get_data_folder(), "move8_boards.npy")

@@ -3,8 +3,9 @@ import os
 import random
 import pickle
 import time
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Optional
 
+import numpy as np
 import torch
 import torch.multiprocessing
 
@@ -82,8 +83,7 @@ class RandomMCTS(MCTS):
             a = random.choice(connect_four.possible_moves(state=state).tolist())
         else:
             n = self.N[rep]
-            visits = 1 + n
-            u_explore = (n.sum() + 1).sqrt() / visits
+            u_explore = (n.sum() + 1).sqrt() / (n + 1)
             u = 1 + self.Q[rep] + self.c * u_explore
             u = u * (1 - state[0, :].abs())
             a = int(torch.argmax(u))
@@ -119,12 +119,14 @@ class NetworkMCTS(MCTS):
 
 def generate_examples(
         nnet: torch.nn.Module, folder: str, iteration: int, process: int, c: float, random_moves: int,
-        num_episodes: int, num_mcts_sims: int, batch_size: int) -> None:
+        num_episodes: int, num_mcts_sims: int, batch_size: int, prob_move8: float) -> None:
     print(f"PROC::LAUNCH::{process}")
     examples = []
     total_time = 0
     nc = connect_net.NetworkCache(nnet=nnet)
     gc = connect_four.GameCache()
+    move8_boards = torch.Tensor(np.load(utils.get_move8_boards_path()))
+    num_boards = len(move8_boards)
     with torch.no_grad():
         for e in range(num_episodes):
             # Beginning of batch
@@ -133,10 +135,16 @@ def generate_examples(
                 nc = connect_net.NetworkCache(nnet=nnet)
                 gc = connect_four.GameCache()
 
+            if random.random() < prob_move8:
+                idx = int(random.random() * num_boards)
+                start_state = move8_boards[idx]
+            else:
+                start_state = None
+
             start_time = time.time()
             examples.append(
                 execute_episode(
-                    c=c, num_mcts_sims=num_mcts_sims, random_moves=random_moves,
+                    c=c, num_mcts_sims=num_mcts_sims, random_moves=random_moves, start_state=start_state,
                     net_cache=nc, game_cache=gc,
                 )
             )
@@ -157,13 +165,13 @@ def generate_examples(
 
 
 def execute_episode(
-        num_mcts_sims: int, c: float, random_moves: int,
+        num_mcts_sims: int, c: float, random_moves: int, start_state: Optional[torch.Tensor],
         net_cache: connect_net.NetworkCache, game_cache: connect_four.GameCache) -> List[utils.MoveInfo]:
     mcts_data = NetworkMCTS(c=c, game_cache=game_cache, network_cache=net_cache)
 
     move = 1
     game_info = []
-    state = connect_four.start_state()
+    state = connect_four.start_state() if start_state is None else start_state
     rep = connect_four.to_rep(state=state)
     while True:
         mcts_data.simulate_moves(num_mcts_sims=num_mcts_sims, state=state, rep=rep)

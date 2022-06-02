@@ -36,7 +36,7 @@ class NetworkStrategy(Strategy):
         self.network_cache = None
         self.mcts = None
 
-    def setup(self, game_cache: connect_four.GameCache):
+    def setup(self, game_cache: connect_four.GameCache) -> None:
         self.game_cache = game_cache
         self.network_cache = connect_net.NetworkCache(nnet=self.nnet)
         self.mcts: mcts.NetworkMCTS = mcts.NetworkMCTS(
@@ -49,10 +49,10 @@ class NetworkStrategy(Strategy):
         if move <= self.random_moves * 2:
             a, _ = self.mcts.get_random_action(rep=rep)
         else:
-            a = self.mcts.get_best_action(rep=rep)
+            a, _ = self.mcts.get_best_action(rep=rep)
         return a
 
-    def simulate(self, state: torch.Tensor, rep: str):
+    def simulate(self, state: torch.Tensor, rep: str) -> None:
         self.mcts.simulate_moves(num_mcts_sims=self.num_mcts_sims, state=state, rep=rep)
 
 
@@ -74,12 +74,12 @@ class RMCTSStrategy(Strategy):
         if move <= self.random_move * 2:
             a, _ = self.mcts.get_random_action(rep=rep)
         else:
-            a = self.mcts.get_best_action(rep=rep)
+            a, _ = self.mcts.get_best_action(rep=rep)
         return a
 
 
 class RandomStrategy(Strategy):
-    def __init__(self):
+    def __init__(self) -> None:
         self.game_cache = None
 
     def setup(self, game_cache: connect_four.GameCache) -> None:
@@ -165,11 +165,10 @@ def parallel_competition(
 
 
 def evaluate_batch(
-        klass: Type[torch.nn.Module], trial: str, c: float, num_mcts_sims: int, random_moves: int, num_games: int, num_processes: int,
-        max_iteration: Optional[int], k: float) -> None:
+        klass: Type[torch.nn.Module], trial: str, c: float, num_mcts_sims: int, random_moves: int,
+        num_games: int, num_processes: int, max_iteration: Optional[int], k: float) -> None:
     if max_iteration is None:
         max_iteration = max([int(f.split("training")[1]) for f in utils.get_training_folders(trial=trial)])
-
     strategies = {}
     for iteration in range(1, max_iteration + 1):
         training_folder = utils.get_training_folder(trial=trial, iteration=iteration)
@@ -206,8 +205,8 @@ def next_rating(rating1: float, rating2: float, score1: float, score2: float, k:
 
 if __name__ == '__main__':
     evaluate_batch(
-        klass=connect_net.ConnectNet,
-        trial="blank01", num_processes=6, max_iteration=96,
-        num_games=400, k=16,
-        c=1, num_mcts_sims=32, random_moves=4,
+        klass=connect_net.ConnectNet2,
+        trial="conv501", num_processes=6, max_iteration=84,
+        num_games=1000, k=16,
+        c=1, num_mcts_sims=32, random_moves=8,
     )
