@@ -43,7 +43,7 @@ def game_ended(state: torch.Tensor) -> Optional[int]:
 
 def next_state(state: torch.Tensor, action: int) -> torch.Tensor:
     """State is always oriented to being red's turn"""
-    state = state.clone()
+    state = state.detach().clone()
     position = 5 - state[:, action].count_nonzero()
     if position == -1:
         raise ValueError(f"Invalid action {action} for state: \n{state}")

@@ -143,6 +143,62 @@ class ConnectNet3(torch.nn.Module):
         return torch.tanh(output[:, 0]), torch.nn.functional.softmax(output[:, 1:], dim=1)
 
 
+class ConnectNet4(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        hidden_size = 256
+        dropout_p = 0.5
+
+        channel_size_1 = 64
+        channel_size_2 = 96
+        channel_size_3 = 144
+        channel_size_4 = 288
+
+        self.conv1 = torch.nn.Conv2d(
+            in_channels=1, out_channels=channel_size_1, kernel_size=(2, 2),
+            stride=1, padding=0,
+        )
+        self.conv2 = torch.nn.Conv2d(
+            in_channels=channel_size_1, out_channels=channel_size_2, kernel_size=(2, 2),
+            stride=1, padding=0,
+        )
+        self.conv3 = torch.nn.Conv2d(
+            in_channels=channel_size_2, out_channels=channel_size_3, kernel_size=(2, 2),
+            stride=1, padding=0,
+        )
+        self.conv4 = torch.nn.Conv2d(
+            in_channels=channel_size_3, out_channels=channel_size_4, kernel_size=(2, 2),
+            stride=1, padding=0,
+        )
+
+        self.conv_layers = torch.nn.Sequential(
+            self.conv1, torch.nn.ReLU(),
+            self.conv2, torch.nn.ReLU(),
+            self.conv3, torch.nn.ReLU(),
+            self.conv4, torch.nn.ReLU(),
+            torch.nn.Flatten(),
+        )
+
+        self.fc1 = torch.nn.Linear(2 * 3 * channel_size_4, hidden_size)
+        self.fc2 = torch.nn.Linear(hidden_size, hidden_size)
+        self.fc3 = torch.nn.Linear(hidden_size, 8)
+
+        self.dropout1 = torch.nn.Dropout(p=dropout_p)
+        self.dropout2 = torch.nn.Dropout(p=dropout_p)
+        self.fc_layers = torch.nn.Sequential(
+            self.dropout1,
+            self.fc1, torch.nn.ReLU(),
+            self.dropout2,
+            self.fc2, torch.nn.ReLU(),
+            self.fc3,
+        )
+
+    def forward(self, x):
+        output = self.conv_layers(x)
+        output = self.fc_layers(output)
+        return torch.tanh(output[:, 0]), torch.nn.functional.softmax(output[:, 1:], dim=1)
+
+
 class NetworkCache:
     def __init__(self, nnet: torch.nn.Module) -> None:
         self.nnet = nnet

@@ -137,7 +137,7 @@ def generate_examples(
 
             if random.random() < prob_move8:
                 idx = int(random.random() * num_boards)
-                start_state = move8_boards[idx]
+                start_state = move8_boards[idx].detach().clone()
             else:
                 start_state = None
 
