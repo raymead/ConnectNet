@@ -205,8 +205,8 @@ def next_rating(rating1: float, rating2: float, score1: float, score2: float, k:
 
 if __name__ == '__main__':
     evaluate_batch(
-        klass=connect_net.ConnectNet2,
-        trial="conv501", num_processes=6, max_iteration=84,
+        klass=connect_net.ConnectNet4,
+        trial="conv402", num_processes=6, max_iteration=64,
         num_games=1000, k=16,
         c=1, num_mcts_sims=32, random_moves=8,
     )

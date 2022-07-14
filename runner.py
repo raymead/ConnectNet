@@ -153,7 +153,7 @@ def get_losses_train_path(trial: str, iteration: int) -> str:
 if __name__ == '__main__':
     trial_name = "conv402"
     train_class = connect_net.ConnectNet4
-    for j in range(35, 150):
+    for j in range(48, 101):
         if j == 1:
             # prev_path = "models/pretrain01.model"
             prev_path = None
